@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestión de Citas</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <nav>
+    <ul id="menu"></ul>
+    <div id="navbar"></div>
+  </nav> 
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    // Solicitar el tipo de usuario y ajustar el menú en función de este
+    fetch('/tipo-usuario')
+        .then(response => response.json())
+        .then(data => {
+            const menu = document.getElementById('menu');
+            const tipoUsuario = data.tipo_usuario;
+
+            // Agregar opciones de menú según el tipo de usuario
+              if (tipoUsuario === 'recepcionista') {
+               menu.innerHTML += '<li><a href="/index.html">Inicio</a></li>';
+               menu.innerHTML += '<li><a href="/ver-mis-datos">Mis Datos</a></li>';
+               menu.innerHTML += '<li><a href="/busqueda.html">Busqueda</a></li>';
+               menu.innerHTML += '<li><a href="/equipos.html">Subir y Descargar equipos medicos</a></li>'
+               menu.innerHTML += '<li><a href="/insertar-cita.html">Agendar una cita</a></li>';
+               menu.innerHTML += '<li><a href="/editar-citas.html"> Cambiar Citas</a></li>';
+               menu.innerHTML += '<li><a href="/eliminar-cita.html"> Eliminar Citas</a></li>';
+               
+            } else if (tipoUsuario === 'administrador') {
+                menu.innerHTML += '<li><a href="/index.html">Inicio</a></li>';
+                menu.innerHTML += '<li><a href="/busqueda.html">Busqueda</a></li>';
+                menu.innerHTML += '<li><a href="/medicos-planta1">Ver medicos <br> planta 1</a></li>';
+                menu.innerHTML += '<li><a href="/medicos-planta2">Ver medicos <br> planta 2</a></li>';
+                menu.innerHTML += '<li><a href="/medicos-planta3">Ver medicos <br> planta 3</a></li>';
+                menu.innerHTML += '<li><a href="/equipos.html">Subir y Descargar equipos medicos</a></li>';
+                menu.innerHTML += '<li><a href="/registrar-medicos.html">Registrar medicos</a></li>';
+        
+
+            } else if (tipoUsuario === 'paciente') {
+                menu.innerHTML += '<li><a href="/index.html">Inicio</a></li>';
+                menu.innerHTML += '<li><a href="/ver-mis-datos">Mis Datos</a></li>';
+                menu.innerHTML += '<li><a href="/informativa.html">Binevenido a nuestra pagina web</a></li>';
+        
+
+            } else if (tipoUsuario === 'medico') {
+               menu.innerHTML += '<li><a href="/index.html">Inicio</a></li>';
+               menu.innerHTML += '<li><a href="/pacientes">Ver Pacientes</a></li>';
+               menu.innerHTML += '<li><a href="/equipos.html">Subir y Descargar</a></li>';
+               menu.innerHTML += '<li><a href="/usuarios_edad_minima"> Paciente de menor edad </a></li>';
+               menu.innerHTML += '<li><a href="/usuarios_edad">Paciente de mayor edad </a></li>';
+               menu.innerHTML += '<li><a href="/editar-citas"> Cambiar y eliminar citas</a></li>';
+                
+            } 
+
+            // Opción de cerrar sesión para todos los tipos de usuario
+            menu.innerHTML += '<li><a href="/logout">Cerrar Sesión</a></li>';
+            
+            
+        })
+        .catch(error => console.error('Error obteniendo el tipo de usuario:', error));
+
+</script>
+</body>
+  </script>
+</body>
+
+<body>
+  <h1>Registra tus datos</Canvas></h1>
+  <p>Esta pagina permite la gestión de citas médicas de un hospital, facilitando la coordinación entre pacientes y profesionales de la salud.</p>
+  <!-- Formularios y botones de insertar/consultar médicos y pacientes -->
+  
+  <form action="/submit-data" method="POST">
+      <label for="name">Nombre del paciente:</label>
+      <input type="text" id="name" name="name">
+      
+      <label for="age">Edad:</label>
+      <input type="number" id="age" name="age">
+    
+      <label for="peso">Peso (Kg):</label>
+      <input type="number" id="weight" name="weight">
+    
+      <button type="submit">Guardar</button>
+    </form>
+  
+    <button onclick="window.location.href='/pacientes'">Ver Pacientes Guardados</button>
+  
+    <link rel="stylesheet" href="styles.css">
+  
+  
+    <h2>Registrar Cita</h2>
+    <form action="/insertar-cita" method="POST">
+      <label for="nombre_paciente">Nombre del paciente:</label>
+      <input type="text" id="nombre_paciente" name="nombre_paciente">
+    
+      <label for="medico">Medico:</label>
+      <input type="text" id="medico" name="medico">
+    
+      <label for="horario">Horario de la cita:</label>
+      <input type="datetime-local" id="horario" name="horario">
+    
+      <button type="submit">Guardar Cita</button>
+    </form>
+  </body>
+  </html>
+  
+
+
