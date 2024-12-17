@@ -1,0 +1,5 @@
+DB_HOST=localhost
+DB_USER=jazmin
+DB_PASS=2905Jj
+DB_NAME=gestion_citas
+PORT=3000
