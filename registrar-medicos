@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Editar Cita</title>
+  <link rel="stylesheet" href="/styles.css">
+ 
+ </script>
+</head>
+<body>
+  <h2>Registrar Medico</h2>
+  <form action="/registrar-medicos" method="POST">
+    <label for="nombre">Nombre del medico:</label>
+    <input type="text" id="nombre" name="nombre">
+  
+    <label for="especialidad">Especialidad:</label>
+    <input type="text" id="especialidad" name="especialidad">
+  
+    <label for="areas_id">Area en la que se encuentra:</label>
+    <input type="number" id="areas_id" name="areas_id">
+
+    <label for="salario">Salario:</label>
+    <input type="number" id="salario" name="salario" step="0.01" required>
+  
+    <button type="submit">Guardar medico</button>
+  </form>
+</body>
+</html>
+<button onclick="window.location.href='/salario-planta1'">Ver medico con el mayor salario de la planta 1</button>
+<button onclick="window.location.href='/salario-planta2'">Ver medico con el mayor salario de la planta 2</button>
+<button onclick="window.location.href='/salario-planta3'">Ver medico con el mayor salario de la planta 3</button>
+<button onclick="window.location.href='/'">Volver</button>
