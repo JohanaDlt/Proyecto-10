@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eliminar Cita</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body>
+  <h1>Eliminar Cita</h1>
+  <form id="deleteForm">
+    <label for="id">ID de la Cita:</label>
+    <input type="number" id="id" name="id" required>
+    <button type="submit">Eliminar Cita</button>
+  </form>
+
+  <script>
+    document.getElementById('deleteForm').addEventListener('submit', function(event) {
+      event.preventDefault();
+      const id = document.getElementById('id').value;
+
+      Swal.fire({
+        title: '¿Estás seguro?',
+        text: "¡No podrás revertir esto!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Sí, eliminarla',
+        cancelButtonText: 'Cancelar'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          fetch(`/eliminar-cita/${id}`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          })
+          .then(response => response.json())
+          .then(data => {
+            if (data.error) {
+              Swal.fire({
+                title: 'Error',
+                text: data.error,
+                icon: 'error',
+                confirmButtonText: 'Aceptar'
+              });
+            } else {
+              Swal.fire({
+                title: 'Eliminado',
+                text: data.message,
+                icon: 'success',
+                confirmButtonText: 'Aceptar'
+              }).then(() => {
+                window.location.reload();
+              });
+            }
+          })
+          .catch(error => {
+            console.error('Error al eliminar la cita:', error);
+            Swal.fire({
+              title: 'Error',
+              text: 'Error al eliminar la cita.',
+              icon: 'error',
+              confirmButtonText: 'Aceptar'
+            });
+          });
+        }
+      });
+    });
+  </script>
+</body>
+</html>
+<button onclick="window.location.href='/citas'">Ver citas registradas</button>
+<button onclick="window.location.href='/'">Volver</button>
