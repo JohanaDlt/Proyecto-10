@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bienvenidos</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .informativo {
+      background-color: #f0f8ff;
+      border: 1px solid #dcdcdc;
+      padding: 20px;
+      margin: 20px auto;
+      width: 80%;
+      border-radius: 8px;
+      text-align: center;
+    }
+    .informativo img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+    }
+    .informativo h2 {
+      color: #004d64;
+    }
+    .informativo p {
+      font-size: 18px;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <div class="informativo">
+    <h2>Bienvenidos a la Plataforma de Gestión de Citas Médicas</h2>
+    <img src="https://sanjavier.com.mx/wp-content/uploads/2019/08/29-AGENDA-MAY22-TW.png" alt="Imagen informativa sobre salud y bienestar">
+    <p>En esta plataforma podrás agendar, ver y gestionar tus citas médicas de manera fácil y rápida. Nuestro objetivo es brindarte la mejor atención y asegurarnos de que recibas el cuidado que mereces. Si tienes alguna duda, no dudes en contactar a nuestro personal de soporte.</p>
+    <p><strong>Importante:</strong> Si tienes alguna pregunta sobre tus datos o necesitas modificar tu cita, puedes hacerlo directamente desde tu perfil en la página. 
+    <p>Para cualquier consulta o inquietud, le invitamos a acercarse al área de Atención al Cliente, donde nuestro equipo especializado estará disponible para proporcionarle la asistencia y la información que necesite..</p>
+    <p>Recuerda que mantener tus datos actualizados es clave para una atención médica eficiente.</p>
+    <button onclick="window.location.href='/'">Volver</button>
+  </div>
+</body>
+</html>
