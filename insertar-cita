@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Editar Cita</title>
+  <link rel="stylesheet" href="/styles.css">
+  <nav>
+    <!-- Incluir barra de navegación desde navbar.html -->
+ <div id="navbar"></div>
+   <ul id="menu"></ul>
+ </nav> 
+ <link rel="stylesheet" href="styles.css">
+ <script>
+   window.onload = () => {
+     fetch('/menu')
+       .then(res => res.json())
+       .then(data => {
+         const menu = document.getElementById('menu');
+         data.forEach(item => {
+           const li = document.createElement('li');
+           li.innerHTML = `<a href="${item.url}">${item.nombre}</a>`;
+           menu.appendChild(li);
+         });
+       });
+   };
+ </script>
+</head>
+<body>
+  <h2>Registrar Cita</h2>
+  <form action="/insertar-cita" method="POST">
+    <label for="nombre_paciente">Nombre del paciente:</label>
+    <input type="text" id="nombre_paciente" name="nombre_paciente">
+  
+    <label for="medico">Medico:</label>
+    <input type="text" id="medico" name="medico">
+  
+    <label for="horario">Horario de la cita:</label>
+    <input type="datetime-local" id="horario" name="horario">
+  
+    <button type="submit">Guardar Cita</button>
+  </form>
+</body>
+</html>
+<button onclick="window.location.href='/'">Volver</button>
