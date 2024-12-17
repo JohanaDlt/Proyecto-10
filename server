@@ -1,0 +1,1215 @@
+
+const express = require('express');
+const session = require('express-session');
+const bcrypt = require('bcrypt');
+const app = express();
+const path = require('path');
+const bodyParser = require('body-parser');
+const mysql = require('mysql2');
+const multer = require('multer');
+const xlsx = require('xlsx');
+require('dotenv').config(); 
+
+
+// Configuración de puerto
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Servidor en funcionamiento en el puerto ${PORT}`));
+
+// Configuración de la base de datos
+
+const db = mysql.createConnection({
+  host: process.env.DB_HOST,     
+  user: process.env.DB_USER,       
+  password: process.env.DB_PASS,   
+  database: process.env.DB_NAME    
+});
+
+db.connect(err => {
+  if (err) {
+    console.error('Error conectando a MySQL:', err);
+    return;
+  }
+  console.log('Conexión exitosa a MySQL');
+});
+
+// Configuración de Middleware
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+
+// Configuración de la sesión
+app.use(session({
+    secret: 'secretKey',
+    resave: false,
+    saveUninitialized: false,
+  }));
+  
+  app.use(express.urlencoded({ extended: true }));
+  app.use(bodyParser.urlencoded({ extended: true }));
+
+
+// Servir archivos estáticos (HTML)
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Ruta para la página principal
+app.get('/', requireLogin, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+
+function requireRole(...roles) {
+  return (req, res, next) => {
+      if (req.session.user && roles.includes(req.session.user.tipo_usuario)) {
+          next();
+      } else {
+          res.status(403).send('<link rel="stylesheet" href="/styles.css"><h1>Acceso denegado<h1>');
+      }
+  };
+}
+function requireLogin(req, res, next) {
+  if (!req.session.user) {
+      return res.redirect('/login.html');
+  }
+  next();
+}
+
+const { createRequire } = require('module');
+
+// Ruta protegida (Página principal después de iniciar sesión)
+  app.get('/', requireLogin, (req, res) => {
+    res.sendFile(__dirname + '/public/index.html');
+  });
+
+ 
+ // Ruta para obtener el tipo de usuario actual
+app.get('/tipo-usuario', requireLogin, (req, res) => {
+  res.json({ tipo_usuario: req.session.user.tipo_usuario });
+});
+
+// Registro de usuario
+app.post('/registrar', (req, res) => {
+  const { nombre_usuario, password, codigos_acceso } = req.body;
+
+  const query = 'SELECT tipo_usuario FROM codigos_acceso WHERE codigo = ?';
+  db.query(query, [codigos_acceso], (err, results) => {
+      if (err || results.length === 0) {
+          return res.send('<link rel="stylesheet" href="/styles.css"><h1>Código de acceso inválido<h1>');
+      }
+
+      const tipo_usuario = results[0].tipo_usuario;
+      const hashedPassword = bcrypt.hashSync(password, 10);
+
+      const insertUser = 'INSERT INTO usuarios (nombre_usuario, password_hash, tipo_usuario) VALUES (?, ?, ?)';
+      db.query(insertUser, [nombre_usuario, hashedPassword, tipo_usuario], (err) => {
+          if (err) return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al registrar usuario<h1>');
+          res.redirect('/login.html');
+      });
+  });
+});
+
+ // Iniciar sesión
+app.post('/login', (req, res) => {
+  const {nombre_usuario, password } = req.body;
+
+  // Consulta para obtener el usuario y su tipo
+  const query = 'SELECT * FROM usuarios WHERE nombre_usuario = ?';
+  db.query(query, [nombre_usuario], (err, results) => {
+      if (err) {
+          return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al obtener el usuario<h1>');
+      }
+
+      if (results.length === 0) {
+          return res.send('<link rel="stylesheet" href="/styles.css"><h1>Usuario no encontrado<h1>');
+      }
+
+      const user = results[0];
+
+      // Verificar la contraseña
+      const isPasswordValid = bcrypt.compareSync(password, user.password_hash);
+      if (!isPasswordValid) {
+          return res.send('<link rel="stylesheet" href="/styles.css"><h1>Contraseña incorrecta, Usuario no encontrado<h1>');
+      }
+
+      // Almacenar la información del usuario en la sesión
+      req.session.user = {
+          id: user.id,
+          nombre_usuario: user.nombre_usuario,
+          tipo_usuario: user.tipo_usuario // Aquí se establece el tipo de usuario en la sesión
+      };  
+      res.redirect('/');
+  });
+});
+
+// Ruta para obtener el tipo de usuario actual
+app.get('/tipo-usuario', requireLogin, (req, res) => {
+  res.json({ tipo_usuario: req.session.user.tipo_usuario });
+});
+
+// Ruta para guardar datos en la base de datos
+app.post('/submit-data', (req, res) => {
+    const { name, age, weight } = req.body;
+  
+    console.log('Datos recibidos:', req.body);
+  
+    const query = 'INSERT INTO pacientes (nombre, edad, peso) VALUES (?, ?, ?)';
+    
+    db.query(query, [name, age, weight], (err, result) => {
+      if (err) {
+        console.error('<link rel="stylesheet" href="/styles.css"><h1>Error al ejecutar la consulta:<h1>', err);
+        return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al guardar los datos en la base de datos.<h1>');
+      }
+  
+      console.log('Resultado de la consulta:', result);
+      res.send(`<link rel="stylesheet" href="/styles.css"><h1>Paciente ${name} guardado en la base de datos.<h1>`);
+    });
+  });
+
+  // Ruta para ver mis datos 
+app.get('/ver-mis-datos', requireLogin, requireRole('paciente'),  (req, res) => {
+  console.log(req.session.user);
+  const user =req.session.user.nombre_usuario;
+  console.log (user);
+  const query = 'SELECT * FROM pacientes WHERE nombre = ?';
+  db.query(query, [user], (err, results) => {
+    
+    if (err) {
+      console.error('<link rel="stylesheet" href="/styles.css"><h1>Error al obtener los datos del paciente.<h1>',err);
+    }
+    if (err) {
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>No se encontraron datos del paciente.<h1>');
+    }
+    const paciente = results[0];
+
+    let html = `
+    <html>
+      <head>
+        <link rel="stylesheet" href="/styles.css">
+        <title>Pacientes</title>
+      </head>
+      <body>
+        <h1>Paciente Registrado</h1>
+        <p><strong>Nombre:</strong> ${paciente.nombre}</p>
+        <p><strong>Edad:</strong> ${paciente.edad}</p>
+        <p><strong>Peso:</strong> ${paciente.peso}</p>
+        <button onclick="window.location.href='/'">Volver</button>
+      </body>
+    </html>
+    `;
+
+    res.send(html);
+  });
+});
+
+
+// Ruta para mostrar los datos de la base de datos en formato HTML
+app.get('/pacientes', requireLogin, requireRole('medico', 'recepcionista'),  (req, res) => {
+  db.query('SELECT * FROM pacientes', (err, results) => {
+    if (err) {
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al obtener los datos.<h1>');
+    }
+
+    let html = `
+      <html>
+      <head>
+        <link rel="stylesheet" href="/styles.css">
+        <title>Pacientes</title>
+      </head>
+      <body>
+        <h1>Pacientes Registrados</h1>
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Edad</th>
+              <th>Peso</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    results.forEach(paciente => {
+      html += `
+        <tr>
+          <td>${paciente.nombre}</td>
+          <td>${paciente.edad}</td>
+           <td>${paciente.peso}</td>
+        </tr>
+      `;
+    });
+
+    html += `
+          </tbody>
+        </table>
+        <button onclick="window.location.href='/'">Volver</button>
+      </body>
+      </html>
+    `;
+
+    res.send(html);
+  });
+});
+
+ // Ruta para buscar pacientes según filtros
+ app.get('/buscar-pacientes', requireRole('medico', 'recepcionista'), (req, res) => {
+  const { name_search, age_search } = req.query;
+  console.log('Parámetros de búsqueda recibidos:', req.query);
+
+  let query = 'SELECT * FROM pacientes WHERE 1=1';
+
+  if (name_search) {
+    query += ` AND nombre LIKE '%${name_search}%'`;
+  }
+  if (age_search) {
+    query += ` AND edad = ${age_search}`;
+  }
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error('<link rel="stylesheet" href="/styles.css"><h1>Error al ejecutar la consulta:<h1>', err);
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al obtener los datos.<h1>');
+    }
+
+    console.log('Resultados obtenidos:', results);
+
+    let html = `
+      <html>
+      <head>
+        <link rel="stylesheet" href="/styles.css">
+        <title>Resultados de Búsqueda</title>
+      </head>
+      <body>
+        <h1>Resultados de Búsqueda</h1>
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Edad</th>
+              <th>Peso (Kg)</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    results.forEach(paciente => {
+      html += `
+        <tr>
+          <td>${paciente.nombre}</td>
+          <td>${paciente.edad}</td>
+          <td>${paciente.peso}</td>
+        </tr>
+      `;
+    });
+
+    html += `
+          </tbody>
+        </table>
+        <button onclick="window.location.href='/'">Volver</button>
+      </body>
+      </html>
+    `;
+
+    res.send(html);
+  });
+});
+
+// Ruta para ordenar pacientes por orden alfabetico
+app.get('/ordenar-pacientes', requireRole('recepcionista'), (req, res) => {
+  const query = 'SELECT * FROM pacientes ORDER BY nombre ASC';
+
+  db.query(query, (err, results) => {
+    if (err) {
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al obtener los datos.<h1>');
+    }
+
+    let html = `
+      <html>
+      <head>
+        <link rel="stylesheet" href="/styles.css">
+        <title>Pacientes Ordenados</title>
+      </head>
+      <body>
+        <h1>Pacientes Ordenados por Orden Alfabético</h1>
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Edad</th>
+              <th>Peso (Kg)</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    results.forEach(paciente => {
+      html += `
+        <tr>
+          <td>${paciente.nombre}</td>
+          <td>${paciente.edad}</td>
+          <td>${paciente.peso}</td>
+        </tr>
+      `;
+    });
+
+    html += `
+          </tbody>
+        </table>
+        <button onclick="window.location.href='/'">Volver</button>
+      </body>
+      </html>
+    `;
+
+    res.send(html);
+  });
+});
+
+// ruta mostrar paciente de mayor edad
+app.get('/usuarios_edad', requireRole('medico'), (req, res) => {
+  const queryMaxEdad = 'SELECT MAX(edad) AS edad_maxima FROM pacientes';
+
+  db.query(queryMaxEdad, (err, results) => {
+    if (err) {
+      console.error('<link rel="stylesheet" href="/styles.css"><h1>Error al ejecutar la consulta para obtener la edad máxima:<h1>', err);
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al obtener los datos.<h1>');
+    }
+
+    // Si no hay resultados, enviar una respuesta adecuada
+    if (results.length === 0) {
+      return res.send('No se encontraron pacientes.');
+    }
+
+    const edadMaxima = results[0].edad_maxima;
+    console.log('Edad máxima obtenida:', edadMaxima);
+
+    const queryPaciente = 'SELECT nombre, edad FROM pacientes WHERE edad = ?';
+    
+    db.query(queryPaciente, [edadMaxima], (err, results) => {
+      if (err) {
+        console.error('<link rel="stylesheet" href="/styles.css"><h1>Error al ejecutar la consulta para obtener el paciente:<h1>', err);
+        return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al obtener los datos.<h1>');
+      }
+
+      console.log('Resultados obtenidos:', results);
+
+      let html = `
+        <html>
+        <head>
+          <link rel="stylesheet" href="/styles.css">
+          <title>Paciente de mayor edad</title>
+        </head>
+        <body>
+          <h1>Paciente de mayor edad</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Edad</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      results.forEach(paciente => {
+        html += `
+          <tr>
+            <td>${paciente.nombre}</td>
+            <td>${paciente.edad}</td>
+          </tr>
+        `;
+      });
+
+      html += `
+            </tbody>
+          </table>
+          <button onclick="window.location.href='/'">Volver</button>
+        </body>
+        </html>
+      `;
+
+      res.send(html);
+    });
+  });
+});
+
+// ruta para mostrar paciente de menor edad
+app.get('/usuarios_edad_minima', requireRole('medico'), (req, res) => {
+  const queryMinEdad = 'SELECT MIN(edad) AS edad_minima FROM pacientes';
+
+  db.query(queryMinEdad, (err, results) => {
+    if (err) {
+      console.error('<link rel="stylesheet" href="/styles.css"><h1>Error al ejecutar la consulta para obtener la edad mínima:<h1>', err);
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al obtener los datos.<h1>');
+    }
+
+    // Si no hay resultados, enviar una respuesta adecuada
+    if (results.length === 0) {
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>No se encontraron pacientes.<h1>');
+    }
+
+    const edadMinima = results[0].edad_minima;
+    console.log('Edad mínima obtenida:', edadMinima);
+
+    const queryPaciente = 'SELECT nombre, edad FROM pacientes WHERE edad = ?';
+    
+   db.query(queryPaciente, [edadMinima], (err, results) => {
+      if (err) {
+        console.error('<link rel="stylesheet" href="/styles.css"><h1>Error al ejecutar la consulta para obtener el paciente:<h1>', err);
+        return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al obtener los datos.<h1>');
+      }
+
+      console.log('Resultados obtenidos:', results);
+
+      let html = `
+        <html>
+        <head>
+          <link rel="stylesheet" href="/styles.css">
+          <title>Paciente de menor edad</title>
+        </head>
+        <body>
+          <h1>Paciente de menor edad</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Edad</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      results.forEach(paciente => {
+        html += `
+          <tr>
+            <td>${paciente.nombre}</td>
+            <td>${paciente.edad}</td>
+          </tr>
+        `;
+      });
+
+      html += `
+            </tbody>
+          </table>
+          <button onclick="window.location.href='/'">Volver</button>
+        </body>
+        </html>
+      `;
+
+      res.send(html);
+    });
+  });
+});
+
+
+
+
+// ruta para mostrar los medicos de la planta 1 
+app.get('/medicos-planta1', requireRole('administrador'), (req, res) => {
+  const queryAreaMed = "SELECT * FROM vista_medicos_planta WHERE area = 'Planta 1'";
+
+  db.query(queryAreaMed, (err, results) => {
+    if (err) {
+      console.error('<link rel="stylesheet" href="/styles.css"><h1>Error al ejecutar la consulta para ver el area en la que se encuentran los medicos:<h1>', err);
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al obtener los datos.<h1>');
+    }
+
+    // Si no hay resultados, enviar una respuesta adecuada
+    if (results.length === 0) {
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>No se encontraron medicos.<h1>');
+    }
+
+    const areaMed = results[0].area_medicos;
+    console.log('Medicos que se encuentran en la planta 1:', areaMed);
+
+    const queryMedicos = "SELECT nombre, especialidad, salario, area FROM vista_medicos_planta WHERE area = 'Planta 1'";
+    
+   db.query(queryMedicos, [areaMed], (err, results) => {
+      if (err) {
+        console.error('<link rel="stylesheet" href="/styles.css"><h1>Error al ejecutar la consulta para ver a los medicos que se encuentran en la planta 1:<h1>', err);
+        return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al obtener los datos.<h1>');
+      }
+
+      console.log('Resultados obtenidos:', results);
+
+      let html = `
+        <html>
+        <head>
+          <link rel="stylesheet" href="/styles.css">
+          <title>Medicos de la planta 1</title>
+        </head>
+        <body>
+          <h1>Medicos de la planta 1</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Especialidadd</th>
+                <th>Salario</th>
+                <th>Area</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      results.forEach(medico => {
+        html += `
+          <tr>
+            <td>${medico.nombre}</td>
+            <td>${medico.especialidad}</td>
+             <td>${medico.salario}</td>
+             <td>${medico.area}</td>
+          </tr>
+        `;
+      });
+  
+
+      html += `
+            </tbody>
+          </table>
+          <button onclick="window.location.href='/'">Volver</button>
+        </body>
+        </html>
+      `;
+
+      res.send(html);
+    });
+  });
+});
+
+// ruta para mostrar los medicos de la planta 2
+app.get('/medicos-planta2', requireRole('administrador'), (req, res) => {
+  const queryAreaMed = "SELECT * FROM vista_medicos_planta WHERE area = 'Planta 2'";
+
+  db.query(queryAreaMed, (err, results) => {
+    if (err) {
+      console.error('<link rel="stylesheet" href="/styles.css"><h1>Error al ejecutar la consulta para ver el area en la que se encuentran los medicos:<h1>', err);
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al obtener los datos.<h1>');
+    }
+
+    // Si no hay resultados, enviar una respuesta adecuada
+    if (results.length === 0) {
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>No se encontraron medicos.<h1>');
+    }
+
+    const areaMed = results[0].area_medicos;
+    console.log('Medicos que se encuentran en la planta 2:', areaMed);
+
+    const queryMedicos = "SELECT nombre, especialidad, salario, area FROM vista_medicos_planta WHERE area = 'Planta 2'";
+    
+   db.query(queryMedicos, [areaMed], (err, results) => {
+      if (err) {
+        console.error('<link rel="stylesheet" href="/styles.css"><h1>Error al ejecutar la consulta para ver a los medicos que se encuentran en la planta 2:<h1>', err);
+        return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al obtener los datos.<h1>');
+      }
+
+      console.log('Resultados obtenidos:', results);
+
+      let html = `
+        <html>
+        <head>
+          <link rel="stylesheet" href="/styles.css">
+          <title>Medicos de la planta 2</title>
+        </head>
+        <body>
+          <h1>Medicos de la planta 2</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Especialidadd</th>
+                <th>Salario</th>
+                <th>Area</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      results.forEach(medico => {
+        html += `
+          <tr>
+            <td>${medico.nombre}</td>
+            <td>${medico.especialidad}</td>
+             <td>${medico.salario}</td>
+             <td>${medico.area}</td>
+          </tr>
+        `;
+      });
+  
+
+      html += `
+            </tbody>
+          </table>
+          <button onclick="window.location.href='/'">Volver</button>
+        </body>
+        </html>
+      `;
+
+      res.send(html);
+    });
+  });
+});
+
+// ruta para mostrar los medicos de la planta 3
+app.get('/medicos-planta3', requireRole('administrador'), (req, res) => {
+  const queryAreaMed = "SELECT * FROM vista_medicos_planta WHERE area = 'Planta 3'";
+
+  db.query(queryAreaMed, (err, results) => {
+    if (err) {
+      console.error('<link rel="stylesheet" href="/styles.css"><h1>Error al ejecutar la consulta para ver el area en la que se encuentran los medicos:<h1>', err);
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al obtener los datos.<h1>');
+    }
+
+    // Si no hay resultados, enviar una respuesta adecuada
+    if (results.length === 0) {
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>No se encontraron medicos.<h1>');
+    }
+
+    const areaMed = results[0].area_medicos;
+    console.log('Medicos que se encuentran en la planta 3:', areaMed);
+
+    const queryMedicos = "SELECT nombre, especialidad, salario, area FROM vista_medicos_planta WHERE area = 'Planta 3'";
+    
+   db.query(queryMedicos, [areaMed], (err, results) => {
+      if (err) {
+        console.error('<link rel="stylesheet" href="/styles.css"><h1>Error al ejecutar la consulta para ver a los medicos que se encuentran en la planta 3:<h1>', err);
+        return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al obtener los datos.<h1>');
+      }
+
+      console.log('Resultados obtenidos:', results);
+
+      let html = `
+        <html>
+        <head>
+          <link rel="stylesheet" href="/styles.css">
+          <title>Medicos de la planta 3</title>
+        </head>
+        <body>
+          <h1>Medicos de la planta 3</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Especialidadd</th>
+                <th>Salario</th>
+                <th>Area</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      results.forEach(medico => {
+        html += `
+          <tr>
+            <td>${medico.nombre}</td>
+            <td>${medico.especialidad}</td>
+             <td>${medico.salario}</td>
+             <td>${medico.area}</td>
+          </tr>
+        `;
+      });
+  
+
+      html += `
+            </tbody>
+          </table>
+          <button onclick="window.location.href='/'">Volver</button>
+        </body>
+        </html>
+      `;
+
+      res.send(html);
+    });
+  });
+});
+
+//Ruta para agendar citas
+app.get('/insertar-citas', requireLogin, requireRole('medico', 'recepcionista'),(req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'insertar-citas.html'));
+});
+
+
+// Ruta para realizar una cita
+app.post('/insertar-cita', requireRole('recepcionista'), (req, res) => {
+  const { nombre_paciente, medico, horario } = req.body;
+  const query = 'INSERT INTO citas (nombre_paciente, medico, horario) VALUES (?, ?, ?)';
+
+  db.query(query, [nombre_paciente, medico, horario], (err, result) => {
+    if (err) {
+      console.error('<link rel="stylesheet" href="/styles.css"><h1>Error al insertar la cita:<h1>', err);
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al insertar la cita.<h1>');
+    }
+    res.send(`<link rel="stylesheet" href="/styles.css"><h1>Cita de ${nombre_paciente} guardada exitosamente.<h1>`);
+  });
+});
+
+app.get('/editar-citas', requireLogin, requireRole('recepcionista'), (req, res) => {
+  console.log('Accediendo a la página de editar citas.');
+  res.sendFile(path.join(__dirname, 'public', 'editar-citas.html'));
+});
+
+// Ruta para obtener una cita específica por ID
+app.get('/obtener-cita/:id', requireRole('recepcionista'), (req, res) => {
+  const { id } = req.params;
+  const query = 'SELECT * FROM citas WHERE id = ?';
+
+  db.query(query, [id], (err, results) => {
+    if (err) {
+      console.error('Error al obtener la cita:', err);
+      return res.status(500).send('Error al obtener la cita.');
+    }
+    if (results.length === 0) {
+      return res.status(404).send('Cita no encontrada.');
+    }
+    res.json(results[0]);
+  });
+});
+
+// Ruta para actualizar una cita existente
+app.post('/editar-cita', requireRole('recepcionista'), (req, res) => {
+  const { id, nombre_paciente, medico, horario } = req.body;
+
+  // Log para revisar los datos recibidos
+  console.log('Datos recibidos para actualizar:', { id, nombre_paciente, medico, horario });
+
+  // Verificar que el ID no esté vacío
+  if (!id) {
+    return res.status(400).send('<link rel="stylesheet" href="/styles.css"><h1>Error: ID de la cita no proporcionado.<h1>');
+  }
+
+  const query = 'UPDATE citas SET nombre_paciente = ?, medico = ?, horario = ? WHERE id = ?';
+
+  db.query(query, [nombre_paciente, medico, horario, id], (err, result) => {
+    if (err) {
+      console.error('Error al actualizar la cita:', err);
+      return res.status(500).send('Error al actualizar la cita.');
+    }
+    console.log('Resultado de la actualización:', result);
+    res.send(`<link rel="stylesheet" href="/styles.css"><h1>Cita de ${nombre_paciente} actualizada exitosamente.<h1>`);
+  });
+});
+
+app.get('/eliminar-cita', requireLogin, requireRole('recepcionista'), (req, res) => {
+  console.log('Accediendo a la página de eliminar citas.');
+  res.sendFile(path.join(__dirname, 'public', 'eliminar-cita.html'));
+});
+
+// Ruta para eliminar una cita existente
+app.delete('/eliminar-cita/:id', requireRole('recepcionista'), (req, res) => {
+  const { id } = req.params;
+  const query = 'DELETE FROM citas WHERE id = ?';
+
+  db.query(query, [id], (err, result) => {
+    if (err) {
+      console.error('Error al eliminar la cita:', err);
+      return res.status(500).send({ error: 'Error al eliminar la cita.' });
+    }
+    if (result.affectedRows === 0) {
+      return res.status(404).send({ error: 'Cita no encontrada.' });
+    }
+    res.send({ message: 'Cita eliminada exitosamente.' });
+  });
+});
+
+//Ruta para registrar medicos
+app.get('/registrar-medicos', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'registrar-medico.html'));
+});
+
+// Ruta para registrar medicos 
+app.post('/registrar-medicos', requireRole('administrador'), (req, res) => {
+  const { nombre, especialidad, areas_id, salario} = req.body;
+  const query = 'INSERT INTO medicos (nombre, especialidad, areas_id, salario) VALUES (?, ?, ?, ?)';
+
+  db.query(query, [nombre, especialidad, areas_id, salario], (err, result) => {
+    if (err) {
+      console.error('<link rel="stylesheet" href="/styles.css"><h1>Error al insertar la cita:<h1>', err);
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al insertar la cita.<h1>');
+    }
+    res.send(`
+      <link rel="stylesheet" href="/styles.css">
+      <h1>Medico ${nombre} guardado exitosamente.</h1>
+    `);
+  });
+});
+
+app.get('/salario-planta1', requireRole('administrador'), (req, res) => {
+  const querySalarioMed = `
+    SELECT nombre, especialidad, salario, area 
+    FROM vista_medicos_planta  
+    WHERE area = 'Planta 1' 
+    AND salario = (
+      SELECT MAX(salario) 
+      FROM vista_medicos_planta 
+      WHERE area = 'Planta 1'
+    )
+  `;
+
+  // Ruta para obtener al médico con mayor salario en Planta 1
+  db.query(querySalarioMed, (err, results) => {
+    if (err) {
+      console.error('<link rel="stylesheet" href="/styles.css"><h1>Error al ejecutar la consulta para ver al médico con mayor salario de la planta 1:<h1>', err);
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al obtener los datos.<h1>');
+    }
+
+    // Si no hay resultados, mostrar un mensaje adecuado
+    if (results.length === 0) {
+      return res.send('No se encontraron médicos con el salario máximo en la planta 1.');
+    }
+
+    console.log('Médico con mayor salario en la planta 1:', results);
+
+    let html = `
+      <html>
+      <head>
+        <link rel="stylesheet" href="/styles.css">
+        <title>Médico con mayor salario de la planta 1</title>
+      </head>
+      <body>
+        <h1>Médico(s) con el mayor salario en la planta 1</h1>
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Especialidad</th>
+              <th>Salario</th>
+              <th>Área</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    // Añade los médicos encontrados en la tabla HTML
+    results.forEach(medico => {
+      html += `
+        <tr>
+          <td>${medico.nombre}</td>
+          <td>${medico.especialidad}</td>
+          <td>${medico.salario}</td>
+          <td>${medico.area}</td>
+        </tr>
+      `;
+    });
+
+    html += `
+          </tbody>
+        </table>
+        <button onclick="window.location.href='/'">Volver</button>
+      </body>
+      </html>
+    `;
+
+    // Envía la respuesta con los datos de los médicos
+    res.send(html);
+  });
+});
+
+app.get('/salario-planta2', requireRole('administrador'), (req, res) => {
+  const querySalarioMed = `
+    SELECT nombre, especialidad, salario, area 
+    FROM vista_medicos_planta  
+    WHERE area = 'Planta 2' 
+    AND salario = (
+      SELECT MAX(salario) 
+      FROM vista_medicos_planta 
+      WHERE area = 'Planta 2'
+    )
+  `;
+
+  // Ruta para obtener al médico con mayor salario en Planta 2
+  db.query(querySalarioMed, (err, results) => {
+    if (err) {
+      console.error('<link rel="stylesheet" href="/styles.css"><h1>Error al ejecutar la consulta para ver al médico con mayor salario de la planta 1:<h1>', err);
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al obtener los datos.<h1>');
+    }
+
+    // Si no hay resultados, mostrar un mensaje adecuado
+    if (results.length === 0) {
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>No se encontraron médicos con el salario máximo en la planta 2.<h1>');
+    }
+
+    console.log('Médico con mayor salario en la planta 2:', results);
+
+    let html = `
+      <html>
+      <head>
+        <link rel="stylesheet" href="/styles.css">
+        <title>Médico con mayor salario de la planta 2</title>
+      </head>
+      <body>
+        <h1>Médico(s) con el mayor salario en la planta 2</h1>
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Especialidad</th>
+              <th>Salario</th>
+              <th>Área</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    // Añade los médicos encontrados en la tabla HTML
+    results.forEach(medico => {
+      html += `
+        <tr>
+          <td>${medico.nombre}</td>
+          <td>${medico.especialidad}</td>
+          <td>${medico.salario}</td>
+          <td>${medico.area}</td>
+        </tr>
+      `;
+    });
+
+    html += `
+          </tbody>
+        </table>
+        <button onclick="window.location.href='/'">Volver</button>
+      </body>
+      </html>
+    `;
+
+    // Envía la respuesta con los datos de los médicos
+    res.send(html);
+  });
+});
+
+
+app.get('/citas', requireLogin, requireRole('recepcionista'), (req, res) => {
+  db.query('SELECT * FROM citas', (err, results) => {
+    if (err) {
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al obtener los datos.<h1>');
+    }
+    
+    let html = `
+      <html>
+      <head>
+        <link rel="stylesheet" href="/styles.css">
+        <title>Pacientes</title>
+      </head>
+      <body>
+        <h1>Pacientes Registrados</h1>
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre del paciente</th>
+              <th>Medico</th>
+              <th>Horario</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    results.forEach(cita => {
+      html += `
+        <tr>
+          <td>${cita.nombre_paciente}</td>
+          <td>${cita.medico}</td>
+          <td>${cita.horario}</td>
+        </tr>
+      `;
+    });
+
+    html += `
+          </tbody>
+        </table>
+        <button onclick="window.location.href='/'">Volver</button>
+      </body>
+      </html>
+    `;
+
+    res.send(html);
+  });
+});
+
+app.get('/salario-planta3', requireRole('administrador'), (req, res) => {
+  const querySalarioMed = `
+    SELECT nombre, especialidad, salario, area 
+    FROM vista_medicos_planta  
+    WHERE area = 'Planta 3' 
+    AND salario = (
+      SELECT MAX(salario) 
+      FROM vista_medicos_planta 
+      WHERE area = 'Planta 3'
+    )
+  `;
+
+  // Ruta para obtener al médico con mayor salario en Planta 3
+  db.query(querySalarioMed, (err, results) => {
+    if (err) {
+      console.error('<link rel="stylesheet" href="/styles.css"><h1>Error al ejecutar la consulta para ver al médico con mayor salario de la planta 3:<h1>', err);
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>Error al obtener los datos.<h1>');
+    }
+
+    // Si no hay resultados, mostrar un mensaje adecuado
+    if (results.length === 0) {
+      return res.send('<link rel="stylesheet" href="/styles.css"><h1>No se encontraron médicos con el salario máximo en la planta 3.<h1>');
+    }
+
+    console.log('Médico con mayor salario en la planta 3:', results);
+
+    let html = `
+      <html>
+      <head>
+        <link rel="stylesheet" href="/styles.css">
+        <title>Médico con mayor salario de la planta 3</title>
+      </head>
+      <body>
+        <h1>Médico(s) con el mayor salario en la planta 3</h1>
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Especialidad</th>
+              <th>Salario</th>
+              <th>Área</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+
+    // Añade los médicos encontrados en la tabla HTML
+    results.forEach(medico => {
+      html += `
+        <tr>
+          <td>${medico.nombre}</td>
+          <td>${medico.especialidad}</td>
+          <td>${medico.salario}</td>
+          <td>${medico.area}</td>
+        </tr>
+      `;
+    });
+
+    html += `
+          </tbody>
+        </table>
+        <button onclick="window.location.href='/'">Volver</button>
+      </body>
+      </html>
+    `;
+
+    // Envía la respuesta con los datos de los médicos
+    res.send(html);
+  });
+});
+
+
+
+//barra de navegacion
+app.get('/menu', (req, res) => {
+  const menuItems = [
+    { nombre: 'Inicio', url: '/index.html' },
+  ];
+  res.json(menuItems);
+});
+
+app.get('/buscarmedicos', requireLogin, requireRole('recepcionista', 'administrador'), (req, res) => {
+  const query = req.query.query;
+  console.log('Query parameter:', query);
+
+  const sql = 'SELECT nombre, especialidad FROM medicos WHERE nombre LIKE ? OR especialidad LIKE ?';
+  console.log('SQL query:', sql);
+  console.log('SQL query with parameters:', `%${query}%`, `%${query}%`);
+
+  db.query(sql, [`%${query}%`, `%${query}%`], (err, results) => {
+    if (err) {
+      console.error('Database error:', err);
+      res.status(500).json({ error: 'Database error' });
+      return;
+    }
+
+    console.log('Database results:', results);
+    res.json(results);
+  });
+});
+
+const upload = multer({ dest: 'uploads/' });
+const pdf = require('pdfkit');
+const fs = require('fs');
+
+app.post('/upload', upload.single('excelFile'), (req, res) => {
+  const filePath = req.file.path;
+  const workbook = xlsx.readFile(filePath);
+  const sheetName = workbook.SheetNames[0];
+  const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+  // Insert data into the database
+  data.forEach(row => {
+    const { nombre, descripcion } = row;
+    const sql = `INSERT INTO equipos (nombre, descripcion) VALUES (?, ?)`;
+    db.query(sql, [nombre, descripcion], err => {
+      if (err) {
+        console.error('Error inserting data:', err);
+        return; // Log the error and continue
+      }
+    });
+  });
+
+  // Send a confirmation message
+  res.send(`
+    <link rel="stylesheet" href="/styles.css">
+    <h1>Archivo cargado y datos guardados</h1>
+    <a href="/equipos.html"><button onclick="window.location.href='/'">Volver</button>
+  `);
+});
+
+// Ruta para descargar en Excel 
+app.get('/download', (req, res) => {
+  const sql = `SELECT * FROM equipos`;
+  db.query(sql, (err, results) => {
+    if (err) throw err;
+
+    const worksheet = xlsx.utils.json_to_sheet(results);
+    const workbook = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(workbook, worksheet, 'Equipos');
+
+    const filePath = path.join(__dirname, 'uploads', 'equipos.xlsx');
+    xlsx.writeFile(workbook, filePath);
+    res.download(filePath, 'equipos.xlsx');
+  });
+});
+
+app.get('/download-pdf', (req, res) => {
+  const sql = `SELECT * FROM equipos`; // Consulta para obtener los datos de los equipos
+  db.query(sql, (err, results) => {
+    if (err) throw err;
+
+    // Crea un nuevo documento PDF
+    const doc = new pdf();
+
+    // Definir la ruta donde se guardará el archivo PDF
+    const filePath = path.join(__dirname, 'pdfs', 'equipos.pdf');
+
+    // Crear una nueva escritura de archivo en la carpeta 'pdfs'
+    const writeStream = fs.createWriteStream(filePath);
+    doc.pipe(writeStream);
+
+    // Configuración y contenido del PDF
+    doc.fontSize(18).text('Equipos Registrados', { align: 'center' });
+
+    doc.fontSize(12).text('Lista de Equipos:');
+    results.forEach((equipo, index) => {
+      doc.text(`${index + 1}. ${equipo.nombre} - ${equipo.descripcion}`);
+    });
+
+    // Finalizar el documento PDF
+    doc.end();
+
+    // Cuando el archivo PDF esté listo, se enviará al cliente para su descarga
+    writeStream.on('finish', () => {
+      res.download(filePath, 'equipos.pdf', (err) => {
+        if (err) {
+          console.error('Error al enviar el PDF para descarga:', err);
+          res.status(500).send('Error al generar el archivo PDF');
+        }
+      });
+    });
+  });
+});
+
+  // Cerrar sesión
+  app.get('/logout', (req, res) => {
+    req.session.destroy();
+    res.redirect('/login.html');
+  });
+
+ 
